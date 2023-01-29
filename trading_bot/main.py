@@ -1,27 +1,35 @@
-from aiogram import Bot, Dispatcher, executor
-from config.personal_data import BOT_TOKEN
-import asyncio
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from db.create_tables import create_tables
-from config.crypto_rsa import create_rsa_keys
-from trading.get_securities import get_security_list
-from tinkoff.invest import Client, OrderDirection, OrderType
+import datetime
+import os
 
-from tinkoff.invest import Client
-from config.personal_data import get_token, get_account
+from robotlib.robot import TradingRobotFactory
+from robotlib.strategy import TradeStrategyParams, MAEStrategy
+from robotlib.vizualization import Visualizer
 
-loop = asyncio.get_event_loop()
-bot = Bot(BOT_TOKEN, parse_mode="HTML")
-dp = Dispatcher(bot, loop=loop, storage=MemoryStorage())
+token = os.environ.get('TINKOFF_TOKEN')
+account_id = os.environ.get('TINKOFF_ACCOUNT')
 
-if __name__ == "__main__":
 
-    from main import dp
-    from bot.handlers.bot_handlers import start
+def backtest(robot):
+    stats = robot.backtest(
+        TradeStrategyParams(instrument_balance=0, currency_balance=15000, pending_orders=[]),
+        train_duration=datetime.timedelta(days=5), test_duration=datetime.timedelta(days=30))
+    stats.save_to_file('backtest_stats.pickle')
 
-    create_tables()
-    create_rsa_keys()
 
-    # print(get_security_list(user_id=699146725, name="Магнит"))
+def trade(robot):
+    stats = robot.trade()
+    stats.save_to_file('stats.pickle')
 
-    executor.start_polling(dp, on_startup=start)
+
+def main():
+    robot_factory = TradingRobotFactory(token=token, account_id=account_id, ticker='YNDX', class_code='TQBR',
+                                        logger_level='INFO')
+    robot = robot_factory.create_robot(MAEStrategy(visualizer=Visualizer('YNDX', 'RUB')), sandbox_mode=True)
+
+    backtest(robot)
+
+    trade(robot)
+
+
+if __name__ == '__main__':
+    main()
